@@ -1,0 +1,18 @@
+{application, erflux,
+ [{description, "InfluxDB client for Erlang (API v2.0)"},
+  {vsn, "2.0.1"},
+  {registered, [erflux_app]},
+  {mod, {erflux_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    crypto,
+    inets,
+    ssl,
+    jsx
+   ]},
+  {env,[]},
+  {modules, [erflux_app, erflux_conf, erflux_sup, erflux_http]},
+  {licenses, ["MIT License (MIT)"]},
+  {links, []}
+ ]}.
