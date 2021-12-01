@@ -15,4 +15,5 @@ test:	build
 
 clean:
 	@rm -f *.dump *.lock *.beam
+	@rm -f apps/erflux/test/test.beam
 	@rm -rf _build
