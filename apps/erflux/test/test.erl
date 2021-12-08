@@ -3,6 +3,14 @@
 
 -export([start/0]).
 
+lnread(File) ->
+    case file:read_line(File) of
+        {ok, Data} -> [
+		lists:reverse(
+		  tl(lists:reverse(Data))) | lnread(File)];
+        eof        -> []
+    end.
+
 start() ->
     application:start(crypto),
     application:start(erflux),
@@ -35,4 +43,28 @@ start() ->
 
     ListPreserveTimestamps = erflux_http:terms_to_dbstyle(ReadResult,
 					DatabaseSets, [ preserve_timestamps ]),
-    io:format("== PRESERVE TIMESTAMPS ==~n~p~n~n", [ ListPreserveTimestamps ]).
+    io:format("== PRESERVE TIMESTAMPS ==~n~p~n~n", [ ListPreserveTimestamps ]),
+
+    {ok, W} = file:open("result-line-format.txt", [write]),
+    ResW = [ io:format(W, "~s~n", [Line]) || Line <- ListPreserveTimestamps ],
+    file:close(W),
+    io:format("Write lines to file: ~p~n", [ResW]),
+
+    {ok, R} = file:open("result-line-format.txt", [read]),
+    Lines = lnread(R),
+    file:close(R),
+    io:format("Lines: ~p~n", [Lines]),
+
+    CreateOtherDatabase = erflux_http:create_database(erfluxtest_other),
+    io:format("CreateOtherDatabase=~p~n", [CreateOtherDatabase]),
+
+    ResDb = [ erflux_http:w(erfluxtest_other, list_to_binary(Line)) || Line <- Lines ],
+    io:format("Insert lines to other db: ~p~n", [ResDb]),
+
+    %% TEST OTHER DB (only with preserve_timestamps argument testing)
+    ReadSyntaxOther = <<"SELECT * FROM testseries ORDER BY time DESC">>,
+    ReadResultOther = erflux_http:q(erfluxtest_other, ReadSyntaxOther),
+
+    ListPreserveTimestampsOther = erflux_http:terms_to_dbstyle(ReadResultOther,
+					DatabaseSets, [ preserve_timestamps ]),
+    io:format("== OTHERDB PRESERVE TIMESTAMPS ==~n~p~n~n", [ ListPreserveTimestampsOther ]).
