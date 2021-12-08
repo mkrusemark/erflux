@@ -52,10 +52,13 @@
   create_cluster_shard/5,
   delete_cluster_shard/3,
   get_interfaces/1,
+  bin_to_timestamp/1,
   q/3,
   w/3,
-  terms_to_dbstyle/1,
-  terms_to_dbstyle/2 ]).
+  get_database_sets/1,
+  get_series_columns/1,
+  terms_to_dbstyle/2,
+  terms_to_dbstyle/3 ]).
 
 -include("erflux.hrl").
 
@@ -494,52 +497,98 @@ w(Pid, DatabaseName, Query) when (is_pid(Pid) orelse is_atom(Pid))
 
 %% Utilities:
 
--spec terms_to_dbstyle( Terms :: term() ) -> list().
-%% @doc Converts DB terms to a list of rows.
-terms_to_dbstyle( Terms ) ->
-    terms_to_dbstyle( Terms, ignore ).
--spec terms_to_dbstyle( Terms :: term(), Opts :: atom() ) -> list().
-%% @doc Converts DB terms to a list of rows.
-terms_to_dbstyle( Terms, Opts ) ->
+get_series(DatabaseResult, DefaultKey) ->
+    [ Results ] = maps:get(<<"results">>, DatabaseResult),
+    SeriesKey = <<"series">>,
+    case maps:is_key(SeriesKey, Results) of
+	false ->
+	    #{DefaultKey => []};
+	true ->
+    	    [ Series ] = maps:get(SeriesKey, Results),
+	    Series
+    end.
+get_series_columns(DatabaseResult) ->
+    ColumnsKey = <<"columns">>,
+    Series = get_series(DatabaseResult, ColumnsKey),
+    maps:get(ColumnsKey, Series).
+get_series_values(DatabaseResult) ->
+    ValuesKey = <<"values">>,
+    Series = get_series(DatabaseResult, ValuesKey),
+    maps:get(ValuesKey, Series).
+
+-spec get_database_sets( DatabaseName :: binary() ) -> list().
+%% @doc Get tag and field keys from IndluxDB.
+get_database_sets(DatabaseName) ->
+    TKResult = q(DatabaseName, <<"SHOW TAG KEYS">>),
+    TSKeys = lists:flatten(get_series_values(TKResult)),
+    FKResult = q(DatabaseName, <<"SHOW FIELD KEYS">>),
+    FSKeys = lists:flatten([
+	lists:reverse(
+	  tl(lists:reverse(KeyName))) ||
+	KeyName <- get_series_values(FKResult) ]),
+    [ TSKeys, FSKeys ].
+
+-spec terms_to_dbstyle( Terms :: term(), DatabaseSets :: list() ) -> list().
+%% @doc Converts DB terms to line format chain.
+terms_to_dbstyle( Terms, DatabaseSets ) ->
+    terms_to_dbstyle( Terms, DatabaseSets, no_timestamps ).
+-spec terms_to_dbstyle( Terms :: term(), DatabaseSets :: list(), Opts :: atom() ) -> list().
+%% @doc Converts DB terms to line format chain.
+terms_to_dbstyle( Terms, DatabaseSets, Opts ) ->
+    [ TSKeys, FSKeys ] = DatabaseSets,
     [ Results ] = maps:get(<<"results">>, Terms),
     [ Series ] = maps:get(<<"series">>, Results),
-    Columns = maps:get(<<"columns">>, Series),
+    DBFields = maps:get(<<"columns">>, Series),
     Values = maps:get(<<"values">>, Series),
     SeriesName = maps:get(<<"name">>, Series),
-    lists:foldl(fun(List, AccLists) ->
-	{ DBFields, DBValues } = case Opts of
-	    preserve_timestamps ->
-		DBF = lists:nthtail(1, Columns) ++ [<<"time">>],
-		DBV = lists:nthtail(1, List) ++ lists:sublist(List, 1, 1),
-		PreserveTimestamps = true,
-		{ DBF, DBV };
-	    _ ->
-		PreserveTimestamps = false,
-		{ Columns, List }
-	end,
-	ColsList = lists:zipwith(fun(Field, Value) ->
-	    case Value of
-		null -> [];
-		_ ->
-		    case Field of
-			<<"value">> ->
-			    lists:flatten(io_lib:format(" ~s=~p",
-				[ binary_to_list(Field), Value ]));
-			<<"time">> when PreserveTimestamps ->
-			    lists:flatten(io_lib:format(" ~p",
-				[ bin_to_timestamp(Value) ]));
-			<<"time">> when not PreserveTimestamps ->
-			    [];
-			_ ->
-			    lists:flatten(io_lib:format(",~s=~p",
-				[ binary_to_list(Field),
-				  binary_to_list(Value) ]))
-		    end
+    lists:foldl(fun(DBValues, AccLists) ->
+	DBTagSet = lists:flatten(lists:zipwith(fun(Field, Value) ->
+	    case lists:member(Field, TSKeys) of
+		false when Value =/= null -> [];
+		false when Value =:= null -> [];
+		true when Value =:= null -> [];
+		_ -> <<Field/binary, "=", Value/binary>>
 	    end
-	end, DBFields, DBValues),
-	FColsList = lists:flatten([ Col || Col <- ColsList, Col /= [] ]),
-	Row = lists:concat([binary_to_list(SeriesName), FColsList]),
-	AccLists ++ [ Row ]
+	end, DBFields, DBValues)),
+	DBFieldSet = lists:flatten(lists:zipwith(fun(Field, Value) ->
+	    case lists:member(Field, FSKeys) of
+		false when Value =:= null -> [];
+		false when Value =/= null -> [];
+		true when Value =:= null -> [];
+		_ when is_binary(Value) ->
+		    BinValue = list_to_binary(lists:flatten(
+			io_lib:format('"~s"', [ Value ]))),
+		    <<Field/binary, "=", BinValue/binary>>;
+		_ ->
+		    BinValue = list_to_binary(lists:flatten(
+			io_lib:format("~p", [ Value ]))),
+		    <<Field/binary, "=", BinValue/binary>>
+	    end
+	end, DBFields, DBValues)),
+	TagSet = lists:join(<<",">>, lists:flatten([
+			Col || Col <- DBTagSet,
+			       Col /= []
+		])),
+	FieldSet = lists:join(<<",">>, lists:flatten([
+			Col || Col <- DBFieldSet,
+			       Col /= []
+		])),
+	LineFormatRow = case TagSet of
+	    [] when Opts =:= [ preserve_timestamps ] ->
+		RowTime = integer_to_binary(hd(DBValues)),
+		[[SeriesName], [<<" ">>],
+		 	FieldSet, [<<" ">>], [RowTime]];
+	    [] ->
+		[[SeriesName], [<<" ">>], FieldSet];
+	    _ when Opts =:= [ preserve_timestamps ] ->
+		RowTime = integer_to_binary(hd(DBValues)),
+		[[SeriesName], [<<",">>], TagSet, [<<" ">>],
+		 	FieldSet, [<<" ">>], [RowTime]];
+	    _ -> [[SeriesName], [<<",">>], TagSet, [<<" ">>],
+		  	FieldSet]
+	end,
+	Row = lists:concat(LineFormatRow),
+	AccLists ++ [ lists:concat([ binary_to_list(Item) || Item <- Row ]) ]
     end, [], Values).
 
 %% Internals:
@@ -580,7 +629,7 @@ a2b( Atom ) ->
   list_to_binary( atom_to_list( Atom ) ).
 
 -spec bin_to_timestamp( Datetime :: binary() ) -> integer().
-%% @doc Converts binary datetime to timestamp (RFC3339).
+%% @doc (OBSOLETE) Converts binary datetime to timestamp (RFC3339).
 bin_to_timestamp(Datetime) ->
     BaseSecs = calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}}),
     case binary:split(Datetime, <<".">>) =:= [Datetime] of
@@ -617,7 +666,7 @@ handle_call( { path, Action, Options }, From, { http, Pid, Config } ) ->
 	false ->
           gen_server:reply(From, <<Action/binary, "?u=", Username/binary, "&p=", Password/binary>>);
 	{ db, DatabaseName } ->
-          gen_server:reply(From, <<Action/binary, "?db=", DatabaseName/binary, "&u=", Username/binary, "&p=", Password/binary>>)
+          gen_server:reply(From, <<Action/binary, "?epoch=ns&db=", DatabaseName/binary, "&u=", Username/binary, "&p=", Password/binary>>)
       end;
     { q, Value } ->
       EscapedValue = list_to_binary( edoc_lib:escape_uri( binary_to_list( Value ) ) ),
@@ -625,7 +674,7 @@ handle_call( { path, Action, Options }, From, { http, Pid, Config } ) ->
 	false ->
 	  gen_server:reply(From, <<Action/binary, "?u=", Username/binary, "&p=", Password/binary, "&q=", EscapedValue/binary>>);
 	{ db, DatabaseName } ->
-	  gen_server:reply(From, <<Action/binary, "?db=", DatabaseName/binary, "&u=", Username/binary, "&p=", Password/binary, "&q=", EscapedValue/binary>>)
+	  gen_server:reply(From, <<Action/binary, "?epoch=ns&db=", DatabaseName/binary, "&u=", Username/binary, "&p=", Password/binary, "&q=", EscapedValue/binary>>)
       end
   end,
   { noreply, { http, Pid, Config } };

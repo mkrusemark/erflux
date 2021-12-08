@@ -17,16 +17,22 @@ start() ->
     application:ensure_all_started(erflux),
     erflux_sup:add_erflux(erflux_http),
 
-    %% A simple example: WRITE TO DB
-    Data = <<"testseries,a=777,b=999,c=333 value=0.998801 1636732718658895378">>,
-    io:format(">>> Write data: ~p~n", [ Data ]),
-    W = erflux_http:w(erfluxtest, Data),
-    io:format(">>> Write result: ~p~n~n", [ W ]),
+    CreateDatabase = erflux_http:create_database(erfluxtest),
+    io:format("CreateDatabase=~p~n", [CreateDatabase]),
 
-    %% A simple example: READ FROM DB
-    InfluxQuery = <<"SELECT a,b,c,value FROM testseries WHERE value > 0 LIMIT 1000">>,
-    DBTerms = erflux_http:q(erfluxtest, InfluxQuery),
-    ListPreserveTimestamps = erflux_http:terms_to_dbstyle(DBTerms, preserve_timestamps),
-    ListNoTimestamps = erflux_http:terms_to_dbstyle(DBTerms),
-    io:format("== PRESERVE TIMESTAMPS ==~n~p~n~n", [ ListPreserveTimestamps ]),
-    io:format("== DEFAULT DB ON WRITE (NO TIMESTAMPS) ==~n~p~n", [ ListNoTimestamps ]).
+    DatabaseSets = erflux_http:get_database_sets(erfluxtest),
+    io:format("DatabaseSets=~p~n", [DatabaseSets]),
+
+    WriteSyntax = <<"testseries,taga=777,tagb=999,tagc=333 field002=0.23,field007=999 1636733333914173508">>,
+    WriteResult = erflux_http:w(erfluxtest, WriteSyntax),
+    io:format("WriteResult=~p~n", [WriteResult]),
+
+    ReadSyntax = <<"SELECT * FROM testseries ORDER BY time DESC">>,
+    ReadResult = erflux_http:q(erfluxtest, ReadSyntax),
+
+    ListNoTimestamps = erflux_http:terms_to_dbstyle(ReadResult, DatabaseSets),
+    io:format("== DEFAULT DB ON WRITE (NO TIMESTAMPS) ==~n~p~n", [ ListNoTimestamps ]),
+
+    ListPreserveTimestamps = erflux_http:terms_to_dbstyle(ReadResult,
+					DatabaseSets, [ preserve_timestamps ]),
+    io:format("== PRESERVE TIMESTAMPS ==~n~p~n~n", [ ListPreserveTimestamps ]).
