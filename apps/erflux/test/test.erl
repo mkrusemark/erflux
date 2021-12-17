@@ -25,6 +25,9 @@ start() ->
     application:ensure_all_started(erflux),
     erflux_sup:add_erflux(erflux_http),
 
+    DeleteDatabase = erflux_http:delete_database(erfluxtest_other),
+    io:format("DeleteDatabase=~p~n", [DeleteDatabase]),
+
     CreateDatabase = erflux_http:create_database(erfluxtest),
     io:format("CreateDatabase=~p~n", [CreateDatabase]),
 

@@ -140,7 +140,7 @@ delete_database(Pid, DatabaseName) when (is_pid(Pid) orelse is_atom(Pid))
   delete_database( Pid, a2b( DatabaseName ) );
 delete_database(Pid, DatabaseName) when (is_pid(Pid) orelse is_atom(Pid))
                                      andalso is_binary(DatabaseName) ->
-  delete( Pid, path( Pid, <<"db/", DatabaseName/binary>> ) ).
+  post( Pid, path( Pid, <<"query">> ), <<"q=DROP DATABASE ", DatabaseName/binary>> ).
 
 %% Database users:
 

@@ -11,7 +11,7 @@ build:	deps
 	rebar compile
 
 test:	build
-	@cd apps/erflux/test && erlc test.erl && erl -noshell -pa ../../../_build/default/lib/*/ebin -s test
+	@cd apps/erflux/test && erlc test.erl && erl -noinput -noshell -pa ../../../_build/default/lib/*/ebin -s test -eval 'init:stop()'
 
 clean:
 	@rm -f *.dump *.lock *.beam
