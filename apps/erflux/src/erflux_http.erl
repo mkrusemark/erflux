@@ -57,6 +57,7 @@
   w/3,
   get_database_sets/1,
   get_series_columns/1,
+  get_record_count/2,
   terms_to_dbstyle/2,
   terms_to_dbstyle/3 ]).
 
@@ -182,7 +183,6 @@ create_user(Pid, DatabaseName, Username, Password) when (is_pid(Pid) orelse is_a
                                                      andalso is_binary(DatabaseName)
                                                      andalso is_binary(Username)
                                                      andalso is_binary(Password) ->
-  %% post( Pid, path( Pid, <<"db/", DatabaseName/binary, "/users">> ), [ { name, Username }, { password, Password } ] ).
   post( Pid, path( Pid, <<"query">> ), <<"q=CREATE USER ", Username/binary, " WITH PASSWORD '", Password/binary, "'; CREATE DATABASE ", DatabaseName/binary, "; GRANT ALL ON ", Username/binary, " TO ", DatabaseName/binary, ";">> ).
 
 -spec delete_database_user( DatabaseName :: atom() | binary(), Username :: atom() | binary() ) -> ok.
@@ -527,6 +527,18 @@ get_database_sets(DatabaseName) ->
 	  tl(lists:reverse(KeyName))) ||
 	KeyName <- get_series_values(FKResult) ]),
     [ TSKeys, FSKeys ].
+
+-spec get_record_count( DatabaseName :: atom() | binary(), MeasurementName :: atom() | binary() ) -> integer().
+%% @doc Get record count from IndluxDB.
+get_record_count(DatabaseName, MeasurementName) when (is_atom(DatabaseName)
+                              andalso is_atom(MeasurementName)) ->
+  get_record_count( a2b(DatabaseName), a2b(MeasurementName) );
+get_record_count(DatabaseName, MeasurementName) ->
+    Terms = q(DatabaseName, <<"SELECT COUNT(*) FROM ", MeasurementName/binary>>),
+    [ Results ] = maps:get(<<"results">>, Terms),
+    [ Series ] = maps:get(<<"series">>, Results),
+    [ Values ] = maps:get(<<"values">>, Series),
+    lists:sum(Values).
 
 -spec terms_to_dbstyle( Terms :: term(), DatabaseSets :: list() ) -> list().
 %% @doc Converts DB terms to line format chain.

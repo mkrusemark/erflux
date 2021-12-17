@@ -34,6 +34,9 @@ start() ->
     DatabaseSets = erflux_http:get_database_sets(erfluxtest),
     io:format("DatabaseSets=~p~n", [DatabaseSets]),
 
+    CountResult = erflux_http:get_record_count(erfluxtest, testseries),
+    io:format("CountResult=~p~n", [CountResult]),
+
     WriteSyntax = <<"testseries,taga=777,tagb=999,tagc=333 field002=0.23,field007=999 1636733333914173508">>,
     WriteResult = erflux_http:w(erfluxtest, WriteSyntax),
     io:format("WriteResult=~p~n", [WriteResult]),
