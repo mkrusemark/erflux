@@ -57,7 +57,7 @@
   w/3,
   get_database_sets/1,
   get_series_columns/1,
-  get_record_count/2,
+  get_field_values_count/2,
   terms_to_dbstyle/2,
   terms_to_dbstyle/3 ]).
 
@@ -528,12 +528,12 @@ get_database_sets(DatabaseName) ->
 	KeyName <- get_series_values(FKResult) ]),
     [ TSKeys, FSKeys ].
 
--spec get_record_count( DatabaseName :: atom() | binary(), MeasurementName :: atom() | binary() ) -> integer().
+-spec get_field_values_count( DatabaseName :: atom() | binary(), MeasurementName :: atom() | binary() ) -> integer().
 %% @doc Get record count from IndluxDB.
-get_record_count(DatabaseName, MeasurementName) when (is_atom(DatabaseName)
+get_field_values_count(DatabaseName, MeasurementName) when (is_atom(DatabaseName)
                               andalso is_atom(MeasurementName)) ->
-  get_record_count( a2b(DatabaseName), a2b(MeasurementName) );
-get_record_count(DatabaseName, MeasurementName) ->
+  get_field_values_count( a2b(DatabaseName), a2b(MeasurementName) );
+get_field_values_count(DatabaseName, MeasurementName) ->
     Terms = q(DatabaseName, <<"SELECT COUNT(*) FROM ", MeasurementName/binary>>),
     [ Results ] = maps:get(<<"results">>, Terms),
     [ Series ] = maps:get(<<"series">>, Results),
