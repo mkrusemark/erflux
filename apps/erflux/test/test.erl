@@ -31,6 +31,12 @@ start() ->
     CreateDatabase = erflux_http:create_database(erfluxtest),
     io:format("CreateDatabase=~p~n", [CreateDatabase]),
 
+    ShowMeasurements = erflux_http:show_measurements(erfluxtest),
+    io:format("ShowMeasurements=~p~n", [ShowMeasurements]),
+
+    IsMeasurementExists = erflux_http:is_measurement_exists(erfluxtest, prueba999),
+    io:format("IsMeasurementExists=~p~n", [IsMeasurementExists]),
+
     DatabaseSets = erflux_http:get_database_sets(erfluxtest),
     io:format("DatabaseSets=~p~n", [DatabaseSets]),
 

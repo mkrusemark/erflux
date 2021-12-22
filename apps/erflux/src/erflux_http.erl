@@ -58,6 +58,8 @@
   get_database_sets/1,
   get_series_columns/1,
   get_field_values_count/2,
+  show_measurements/1,
+  is_measurement_exists/2,
   terms_to_dbstyle/2,
   terms_to_dbstyle/3 ]).
 
@@ -539,6 +541,26 @@ get_field_values_count(DatabaseName, MeasurementName) ->
     [ Series ] = maps:get(<<"series">>, Results),
     [ Values ] = maps:get(<<"values">>, Series),
     lists:sum(Values).
+
+-spec show_measurements( DatabaseName :: atom() | binary() ) -> list().
+%% @doc Get list of measurements from a database.
+show_measurements(DatabaseName) when (is_atom(DatabaseName)) ->
+  show_measurements( a2b(DatabaseName) );
+show_measurements(DatabaseName) ->
+    Terms = q(DatabaseName, <<"SHOW MEASUREMENTS ON ", DatabaseName/binary>>),
+    [ Results ] = maps:get(<<"results">>, Terms),
+    [ Series ] = maps:get(<<"series">>, Results),
+    Values = maps:get(<<"values">>, Series),
+    lists:flatten(Values).
+
+-spec is_measurement_exists( DatabaseName :: atom() | binary(), MeasurementName :: atom() | binary() ) -> boolean().
+%% @doc Get true/false if a measurement exist.
+is_measurement_exists(DatabaseName, MeasurementName) when (is_atom(DatabaseName)
+                              andalso is_atom(MeasurementName)) ->
+  is_measurement_exists( a2b(DatabaseName), a2b(MeasurementName) );
+is_measurement_exists(DatabaseName, MeasurementName) ->
+    Measurements = show_measurements(DatabaseName),
+    lists:member(MeasurementName, Measurements).
 
 -spec terms_to_dbstyle( Terms :: term(), DatabaseSets :: list() ) -> list().
 %% @doc Converts DB terms to line format chain.
