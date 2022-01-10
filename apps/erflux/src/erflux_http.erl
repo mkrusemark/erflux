@@ -549,9 +549,14 @@ show_measurements(DatabaseName) when (is_atom(DatabaseName)) ->
 show_measurements(DatabaseName) ->
     Terms = q(DatabaseName, <<"SHOW MEASUREMENTS ON ", DatabaseName/binary>>),
     [ Results ] = maps:get(<<"results">>, Terms),
-    [ Series ] = maps:get(<<"series">>, Results),
-    Values = maps:get(<<"values">>, Series),
-    lists:flatten(Values).
+    case maps:is_key(<<"series">>, Results) of
+	true ->
+	    [ Series ] = maps:get(<<"series">>, Results),
+	    Values = maps:get(<<"values">>, Series),
+	    lists:flatten(Values);
+	false ->
+	    []
+    end.
 
 -spec is_measurement_exists( DatabaseName :: atom() | binary(), MeasurementName :: atom() | binary() ) -> boolean().
 %% @doc Get true/false if a measurement exist.
