@@ -518,12 +518,14 @@ get_series_values(DatabaseResult) ->
     Series = get_series(DatabaseResult, ValuesKey),
     maps:get(ValuesKey, Series).
 
--spec get_database_sets( DatabaseName :: binary() ) -> list().
+-spec get_database_sets( DatabaseName :: atom() | binary() ) -> list().
 %% @doc Get tag and field keys from IndluxDB.
+get_database_sets(DatabaseName) when is_atom(DatabaseName) ->
+  get_database_sets( a2b(DatabaseName) );
 get_database_sets(DatabaseName) ->
-    TKResult = q(DatabaseName, <<"SHOW TAG KEYS">>),
+    TKResult = q(DatabaseName, <<"SHOW TAG KEYS ON ", DatabaseName/binary>>),
     TSKeys = lists:flatten(get_series_values(TKResult)),
-    FKResult = q(DatabaseName, <<"SHOW FIELD KEYS">>),
+    FKResult = q(DatabaseName, <<"SHOW FIELD KEYS ON ", DatabaseName/binary>>),
     FSKeys = lists:flatten([
 	lists:reverse(
 	  tl(lists:reverse(KeyName))) ||
@@ -538,9 +540,13 @@ get_field_values_count(DatabaseName, MeasurementName) when (is_atom(DatabaseName
 get_field_values_count(DatabaseName, MeasurementName) ->
     Terms = q(DatabaseName, <<"SELECT COUNT(*) FROM ", MeasurementName/binary>>),
     [ Results ] = maps:get(<<"results">>, Terms),
-    [ Series ] = maps:get(<<"series">>, Results),
-    [ Values ] = maps:get(<<"values">>, Series),
-    lists:sum(Values).
+    case maps:is_key(<<"series">>, Results) of
+	false -> 0;
+	true ->
+	    [ Series ] = maps:get(<<"series">>, Results),
+	    [ Values ] = maps:get(<<"values">>, Series),
+	    lists:sum(Values)
+    end.
 
 -spec show_measurements( DatabaseName :: atom() | binary() ) -> list().
 %% @doc Get list of measurements from a database.
